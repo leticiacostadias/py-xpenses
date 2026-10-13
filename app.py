@@ -1,0 +1,80 @@
+from flask import Flask, render_template, redirect, request
+from flask_scss import Scss
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime, timezone
+
+app = Flask(__name__)
+Scss(app)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///database.db"
+db = SQLAlchemy(app)
+
+class Expense(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    description = db.Column(db.String(200), nullable=False)
+    value = db.Column(db.Double, nullable=False)
+    category = db.Column(db.String(200))
+    date = db.Column(db.DateTime, default=datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=datetime.now(timezone.utc))
+    
+    def __repr__(self) -> str:
+        return f"Task {self.id}"
+    
+
+@app.route("/", methods=["POST", "GET"])
+def index():
+    if request.method == "POST":
+        description = request.form["description"]
+        value = request.form["value"]
+        category = request.form["category"]
+        date = datetime.strptime(request.form["date"], "%Y-%m-%d")
+        new_expense = Expense(description = description, value=value, category=category, date=date)
+        
+        try:
+            db.session.add(new_expense)
+            db.session.commit()
+            return redirect("/")
+        except Exception as e:
+            print(f"Error: {e}")
+            return f"Error: {e}"
+    
+    else:
+        expenses = Expense.query.order_by(Expense.created_at).all()
+        return render_template("index.html", expenses=expenses)
+    
+@app.route("/delete/<int:id>")
+def delete(id: int):
+    delete_expense = Expense.query.get_or_404(id)
+    
+    try:
+        db.session.delete(delete_expense)
+        db.session.commit()
+        
+        return redirect("/")
+    except Exception as e:
+                print(f"Error: {e}")
+                return f"Error: {e}"
+            
+
+@app.route("/update/<int:id>", methods=["GET", "PUT"])
+def edit(id:int):
+    expense = Expense.query.get_or_404(id)
+    if request.method == "PUT":
+        expense.description = request.form["description"]
+        expense.value = request.form["value"]
+        expense.category = request.form["category"]
+        expense.date = datetime.strptime(request.form["date"], "%Y-%m-%d")
+        try:
+            db.session.commit()
+            return redirect("/")
+        except Exception as e:
+            return f"Error: {e}"
+    else:
+        expenses = Expense.query.order_by(Expense.created_at).all()
+        return render_template("index.html", expenses=expenses, editing_expense=expense)
+
+if __name__ in "__main__":
+    with app.app_context():
+        db.create_all()
+    
+    app.run(debug=True)
